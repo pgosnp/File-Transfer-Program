@@ -72,17 +72,6 @@ public class CreateZipFile {
                 }
             }
         }
-
-    }
-
-    public static void main(String[] args) {
-
-        String zipFile = "D:/test download/archive.zip";
-
-        String srcDir = "C:\\Users\\ShInG\\Desktop\\File-Transfer-Program-master";
-
-        new CreateZipFile(srcDir, zipFile);
-
     }
 
 }

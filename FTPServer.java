@@ -1,10 +1,8 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Scanner;
-import java.util.zip.ZipInputStream;
 
 public class FTPServer {
     public static int connectCount = 0;
@@ -32,14 +30,15 @@ public class FTPServer {
             Socket cSocket = sSocket.accept();
             connectCount++;
             System.out.println("Connected client:" + connectCount);
-            clientInfo = "connected from " + receiveName(cSocket) + ": " +
+            String clientName = receiveName(cSocket);
+            clientInfo = "connected from " + clientName + ": " +
                     cSocket.getInetAddress().getHostAddress() + "\n";
             clientList += clientInfo;
             System.out.println(clientList);
             System.out.println("----------------------------------\n");
             new Thread(() -> {
                 try {
-                    serve(cSocket);
+                    serve(cSocket, clientName);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -47,15 +46,67 @@ public class FTPServer {
         }
     }
 
-    private void serve(Socket socket) throws IOException {
-        boolean checkPW = false;
+    private void serve(Socket socket, String clientName) throws IOException {
         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
         DataInputStream in = new DataInputStream(socket.getInputStream());
-        checkPassword(in, out, checkPW);
+        checkPassword(in, out);
         sendCurrentDir(out, rootDir);
         while (true) {
             if (internal == 006) break;
-            handleCommand(in, out);
+            handleCommand(in, out, clientName);
+            System.out.println();
+        }
+    }
+
+    private void handleCommand(DataInputStream in, DataOutputStream out, String clientName) throws IOException {
+        String clientPath = receivePath(in); // Get the client current directory at every command.
+        internal = in.readInt(); // Command code to internal code for communication.
+        String option = receiveMsg(in);
+        System.out.println("Handling command by " + clientName + "... internal: " + internal + " option: " + option);
+        switch (internal) {
+            case 001:
+                listFiles(out, clientPath);
+                break;
+            case 002:
+                changeDir(option, out, clientPath);
+                break;
+            case 003:
+                pwd(out, clientPath);
+                break;
+            case 004:
+                String[] optionList = option.split(" ");
+                int fileNum = optionList.length;
+                System.out.println("fileNum: " + fileNum);
+                out.writeInt(fileNum);
+                if (fileNum == 1) {
+                    File f = new File(optionList[0]);
+                    if (checkOption(f.getName(), out, clientPath)) {
+                        if (f.isFile()) {
+                            sendFile(optionList[0], out, clientPath);
+                        } else {
+                            String zip = zipFolder(clientPath, optionList[0]);
+                            sendFile(zip, out, clientPath);
+                        }
+                    }
+                } else {
+                    multiThreadSend(optionList, clientPath);
+                }
+                break;
+            case 005:
+                int dirFileNum = fileNum(out, clientPath);
+                out.writeInt(dirFileNum);
+                String dirFile = "";
+                File curDir = new File(clientPath);
+                File[] curDirFile = curDir.listFiles();
+                for (File f : curDirFile
+                        ) {
+                    dirFile += f.getName() + " ";
+                }
+                String[] dirFilelist = dirFile.split(" ");
+                multiThreadSend(dirFilelist, clientPath);
+                break;
+            case 006:
+                break;
         }
     }
 
@@ -73,7 +124,8 @@ public class FTPServer {
         return name;
     }
 
-    private void checkPassword(DataInputStream in, DataOutputStream out, boolean checkPW) throws IOException {
+    private void checkPassword(DataInputStream in, DataOutputStream out) throws IOException {
+        boolean checkPW = false;
         while (true) {
             byte[] buffer = new byte[1024];
             String str = "";
@@ -87,14 +139,21 @@ public class FTPServer {
                 str += new String(buffer, 0, len);
             }
             System.out.println("client input: " + str);
+
+            // correct password
             if (str.equals(password)) {
                 checkPW = true;
                 System.out.println("client type the correct password.");
-            } else {
+            }
+
+            // wrong password
+            else {
                 checkPW = false;
                 System.out.println("client type the wrong password.");
             }
             out.writeBoolean(checkPW);
+
+            // break the loop, and go to handleCommand loop
             if (checkPW == true) {
                 System.out.println("Going to handle client command.\n");
                 System.out.println("----------------------------------\n");
@@ -120,59 +179,6 @@ public class FTPServer {
             count += len;
         }
         return clientPath;
-    }
-
-    private void handleCommand(DataInputStream in, DataOutputStream out) throws IOException {
-        String clientPath = receivePath(in);
-        internal = in.readInt();
-        String option = receiveMsg(in);
-        System.out.println("Handling command... internal: " + internal + " option: " + option);
-        switch (internal) {
-            case 001:
-                listFiles(out, clientPath);
-                break;
-            case 002:
-                changeDir(option, out, clientPath);
-                break;
-            case 003:
-                pwd(out, clientPath);
-                break;
-            case 004:
-                String[] optionList = option.split(" ");
-                int fileNum = optionList.length;
-                System.out.println("fileNum: " + fileNum);
-                out.writeInt(fileNum);
-                if (fileNum == 1) {
-                    File f = new File(optionList[0]);
-                    if (checkOption(f.getName(),out,clientPath)) {
-                        if (f.isFile()) {
-                            sendFile(optionList[0], out, clientPath);
-                        } else {
-//                        String srcDir = clientPath+"/"+optionList[0];
-                            String zip = zipFolder(clientPath, optionList[0]);
-                            sendFile(zip, out, clientPath);
-                        }
-                    }
-                } else {
-                    multiThreadSend(optionList, clientPath);
-                }
-                break;
-            case 005:
-                int dirFileNum = sendAll(out, clientPath);
-                out.writeInt(dirFileNum);
-                String dirFile = "";
-                File curDir = new File(clientPath);
-                File[] curDirFile = curDir.listFiles();
-                for (File f : curDirFile
-                        ) {
-                    dirFile += f.getName() + " ";
-                }
-                String[] dirFilelist = dirFile.split(" ");
-                multiThreadSend(dirFilelist, clientPath);
-                break;
-            case 006:
-                break;
-        }
     }
 
     public String receiveMsg(DataInputStream in) throws IOException {
@@ -201,7 +207,6 @@ public class FTPServer {
         String info = "";
         File dir = new File(clientPath);
         File[] fileList = dir.listFiles();
-
         for (File file : fileList
                 ) {
             info += getInfo(file) + "\n";
@@ -239,44 +244,46 @@ public class FTPServer {
 
         } else if (path.equals("..")) {
 
-            if (dir.getCanonicalPath().equals(rootDir.getCanonicalPath())) { // At root dir and cd ..
-
+            // At root dir and cd ..
+            if (dir.getCanonicalPath().equals(rootDir.getCanonicalPath())) {
                 checkPath = false;
                 out.writeBoolean(checkPath);
                 msg = "This is home dir. You cannot go to Parent Dir anymore.";
                 out.writeInt(msg.length());
                 out.write(msg.getBytes());
                 System.out.println(msg);
+            }
 
-            } else { // Not at root dir and cd ..
-
+            // Not at root dir and cd ..
+            else {
                 checkPath = true;
                 out.writeBoolean(checkPath);
                 clientPath = dir.getParent();
                 out.writeInt(clientPath.length());
                 out.write(clientPath.getBytes());
-
             }
+
+            // Go to root Dir
         } else if (path.equals("~")) {
             checkPath = true;
             out.writeBoolean(checkPath);
             clientPath = rootDir.getCanonicalPath();
             out.writeInt(clientPath.length());
             out.write(clientPath.getBytes());
-        } else { // wrong next path
+        }
 
+        // Wrong next path
+        else {
             checkPath = false;
             out.writeBoolean(checkPath);
             msg = newDir.getName() + " is not a folder. Please input again.";
             out.writeInt(msg.length());
             out.write(msg.getBytes());
             System.out.println(msg);
-
         }
-
     }
 
-    private boolean checkOption(String option, DataOutputStream out,String clientPath) throws IOException {
+    private boolean checkOption(String option, DataOutputStream out, String clientPath) throws IOException {
         boolean checkOption = false;
         String filePath = clientPath + "/" + option;
         File file = new File(filePath);
@@ -288,101 +295,6 @@ public class FTPServer {
         out.writeBoolean(checkOption);
         return checkOption;
     }
-
-    private void checkFileAndDir(String filename, DataOutputStream out, String clientPath) throws IOException {
-        boolean checkfilename = false;
-        boolean isFile = true;
-        String filePath = clientPath + "/" + filename;
-        File file = new File(filePath);
-
-        if (file.exists() && file.isDirectory()) { // is Dir
-            checkfilename = true;
-            out.writeBoolean(checkfilename);
-            isFile = false;
-            out.writeBoolean(isFile);
-            out.writeInt(file.getName().length());
-            out.write(file.getName().getBytes());
-            File[] filelist_f = file.listFiles();
-            String filelist = "";
-            for (File f : filelist_f
-                    ) {
-                filelist += f.getName() + " ";
-            }
-            out.writeInt(filelist.length());
-            out.write(filelist.getBytes());
-        } else if (file.exists() && file.isFile()) { // is file
-            checkfilename = true;
-            out.writeBoolean(checkfilename);
-            isFile = true;
-            out.writeBoolean(isFile);
-            out.writeInt(file.getName().length());
-            out.write(file.getName().getBytes());
-        } else if (!file.exists()) { // wrong name , file not exist
-            checkfilename = false;
-            out.writeBoolean(checkfilename);
-            isFile = false;
-            out.writeBoolean(isFile);
-        }
-
-    }
-
-//    private void sendFile(String filename, DataOutputStream out, String clientPath) throws IOException {
-//        String msg = "";
-//        boolean checkfile = false;
-//        boolean isFile = true;
-//        byte[] buffer = new byte[1024];
-//        String filePath = clientPath + "/" + filename;
-//        File curDir = new File(clientPath);
-//        File file = new File(filePath);
-//        if (file.exists() && file.isDirectory()) {
-//            checkfile = true;
-//            out.writeBoolean(checkfile);
-//            isFile = false;
-//            out.writeBoolean(isFile);
-//            out.writeInt(file.listFiles().length);
-//            if (file.listFiles() != null) {
-//                for (File f : file.listFiles()
-//                        ) {
-//                    out.writeInt(f.getName().length());
-//                    out.write(f.getName().getBytes());
-//                    System.out.println("filename: " + f.getName());
-//                    downFile(f.getName(), out, filePath);
-//                }
-//            }
-//        } else if (file.exists() && file.isFile()) {
-//            checkfile = true;
-//            out.writeBoolean(checkfile);
-//            isFile = true;
-//            out.writeBoolean(isFile);
-//            System.out.println(file.getCanonicalPath());
-//            FileInputStream fin = new FileInputStream(file);
-//            long size = file.length();
-//            long count = 0;
-//            int len;
-//            out.writeLong(size);
-//            while (count < size) {
-//                len = fin.read(buffer, 0, buffer.length);
-//                count += len;
-//                out.write(buffer, 0, len);
-//                System.out.println(file.getName() + " sends out...");
-//            }
-////        fin.close();
-////            msg = filename + " is downloaded.";
-////            out.writeInt(msg.length());
-////            out.write(msg.getBytes());
-////            out.flush();
-//        } else if (!file.exists()) {
-//            checkfile = false;
-//            out.writeBoolean(checkfile);
-//            isFile = false;
-//            out.writeBoolean(isFile);
-//            msg = filename + " is not correct. Please input the correct download filename/folder.";
-//            out.writeInt(msg.length());
-//            out.write(msg.getBytes());
-//            out.flush();
-//        }
-//
-//    }
 
     private void sendFile(String filename, DataOutputStream out, String clientPath) throws IOException {
         out.writeInt(filename.length());
@@ -410,7 +322,6 @@ public class FTPServer {
         out.write(msg.getBytes());
         fin.close();
         if (file.getName().contains(".zip")) {
-//            System.out.println(file.getName());
             if (file.delete()) {
                 System.out.println(file.getName() + " is deleted");
             }
@@ -426,20 +337,18 @@ public class FTPServer {
             DataOutputStream out = new DataOutputStream(cSocket.getOutputStream());
             new Thread(() -> {
                 try {
-                    if(checkOption(filename[fileID],out,clientPath)){
-                        String filepath = clientPath+"/"+filename[fileID];
+                    if (checkOption(filename[fileID], out, clientPath)) {
+                        String filepath = clientPath + "/" + filename[fileID];
                         File f = new File(filepath);
-                        if(f.isFile()){
-                        sendFile(filename[fileID], out, clientPath);
-                        }else{
+                        if (f.isFile()) {
+                            sendFile(filename[fileID], out, clientPath);
+                        } else {
                             String zip = zipFolder(clientPath, filename[fileID]);
                             sendFile(zip, out, clientPath);
                         }
+                    } else {
+                        System.out.println((fileID + 1) + " option is wrong");
                     }
-                    else{
-                        System.out.println((fileID+1)+" option is wrong");
-                    }
-//                    String zip = zipFolder(clientPath, optionList[0]);
                 } catch (IOException e) {
                 }
             }).start();
@@ -447,22 +356,16 @@ public class FTPServer {
         multiServerSocket.close();
     }
 
-    private int sendAll(DataOutputStream out, String clientPath) throws IOException {
+    private int fileNum(DataOutputStream out, String clientPath) throws IOException {
         File curDir = new File(clientPath);
         File[] filelist = curDir.listFiles();
         int fileNum = filelist.length;
-//        for (File file : filelist
-//                ) {
-//            if (file.isFile()) {
-//                sendFile(file.getName(), out, clientPath);
-//            }
-//        }
         return fileNum;
     }
 
     private String zipFolder(String srcDir, String folder) throws IOException {
         String zipFile = srcDir + "/" + folder + ".zip";
-        new CreateZipFile(srcDir+"/"+folder, zipFile);
+        new CreateZipFile(srcDir + "/" + folder, zipFile);
         return folder + ".zip";
     }
 

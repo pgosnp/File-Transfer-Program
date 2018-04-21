@@ -8,7 +8,7 @@ public class FTPClient {
     String rootDir;
     String currentDir;
     String ip;
-    String downloadPath = "D:\\test download\\";
+    String downloadPath = "D:\\test download\\"; // set the download path for client
     int port;
 
     public FTPClient(String ip, int port) throws IOException {
@@ -36,14 +36,14 @@ public class FTPClient {
         Scanner scanner = new Scanner(System.in);
         System.out.println("You can use the following command:\n" +
                 "(1) ls: This command allows the users to browse the shared files with the corresponding file name and file size.\n" +
-                "(2) cd ．directory・: This command allows the users to change to current directory to the ．directory・. For example, cd folder1\n" +
+                "(2) cd 'directory': This command allows the users to change to current directory to the 'directory'. " +
+                "For example, cd ~ (Go to Root Dir) , cd .. (Go to previous Dir), cd folder1 (Go to folder1)\n" +
                 "(3) pwd: This command prints working directory to the users.\n" +
-                "(4) dl ．filename(s)・: This command allows the users to download or multithread download the selected" +
-                "files by input ：dl ．filename(s)・； such as:\n" +
-                "Example 1: ：dl 1.txt；. The example only download 1.txt.\n" +
-                "Example 2:：dl 1.txt 2.txt 3.txt；. The example will download 1.txt,2.txt and 3.txt.\n" +
-                "(5) dlall: This command allows the users to download the whole directory by multithread" +
-                "downloading.\n" +
+                "(4) dl 'filename(s)': This command allows the users to download or multiThread download the selected" +
+                "files by input ：dl 'filename(s)' such as:\n" +
+                "Example 1: 'dl 1.txt'. The example only download 1.txt.\n" +
+                "Example 2: 'dl 1.txt 2.txt 3.txt'. The example will download 1.txt,2.txt and 3.txt.\n" +
+                "(5) dlall: This command allows the users to download the whole directory by multiThread downloading.\n" +
                 "(6) exit: This command allows the users to quit the program and then close or disconnect the" +
                 "connection from the network.\n");
         while (true) {
@@ -87,9 +87,13 @@ public class FTPClient {
             out.write(option.getBytes());
             System.out.println("internal: " + internal + " option: " + option + " option len: " + option.length());
 
+            // 001: ls , 003: pwd
             if (internal == 001 || internal == 003) {
                 System.out.println(receiveMsg(in));
-            } else if (internal == 002) {
+            }
+
+            // 002: cd
+            else if (internal == 002) {
                 boolean checkPath = in.readBoolean();
                 System.out.println("checkPath: " + checkPath);
                 String str = receiveMsg(in);
@@ -100,49 +104,46 @@ public class FTPClient {
                     System.out.println(str);
                 }
                 System.out.println();
-            } else if (internal == 004) {
+            }
+
+            // 004: dl
+            else if (internal == 004) {
                 int fileNum = in.readInt();
                 if (fileNum == 1) {
                     boolean checkOption = in.readBoolean();
                     if (checkOption) {
                         receiveFile(in);
-                    }
-                    else {
-                        System.out.println("Option is wrong. Please input ootion again.\n");
+                    } else {
+                        System.out.println("Option is wrong. Please input option again.\n");
                     }
                 } else {
                     multiThreadReceive(fileNum);
                 }
-            } else if (internal == 005) {
+            }
+
+            // 005: dlall
+            else if (internal == 005) {
                 int fileNum = in.readInt();
                 multiThreadReceive(fileNum);
-            } else if (internal == 006) {
+            }
+
+            // 006: exit
+            else if (internal == 006) {
                 break;
-            } else if (internal == -1) {
+            }
+
+            // -1: Wrong command
+            else if (internal == -1) {
                 System.out.println("You type the wrong command! Please type it again!");
                 continue;
             }
         }
     }
 
-    public void receivePath(DataInputStream in) throws IOException {
-        byte[] buffer = new byte[1024];
-        int size = in.readInt();
-        int count = 0, len = 0;
-        while (count < size) {
-            len = in.read(buffer, 0, buffer.length);
-            currentDir = new String(buffer, 0, len);
-            count += len;
-        }
-        rootDir = currentDir;
-        System.out.println("Root Path: " + rootDir + "\n");
-    }
-
     public void sendPath(DataOutputStream out) throws IOException {
         out.writeInt(currentDir.length());
         out.write(currentDir.getBytes());
     }
-
 
     public void sendName(DataOutputStream out) throws IOException {
         Scanner scanner = new Scanner(System.in);
@@ -171,6 +172,19 @@ public class FTPClient {
         }
     }
 
+    public void receivePath(DataInputStream in) throws IOException {
+        byte[] buffer = new byte[1024];
+        int size = in.readInt();
+        int count = 0, len = 0;
+        while (count < size) {
+            len = in.read(buffer, 0, buffer.length);
+            currentDir = new String(buffer, 0, len);
+            count += len;
+        }
+        rootDir = currentDir;
+        System.out.println("Root Path: " + rootDir + "\n");
+    }
+
     public String receiveMsg(DataInputStream in) throws IOException {
         String msg = "";
         byte[] buffer = new byte[1024];
@@ -183,114 +197,6 @@ public class FTPClient {
         }
         return msg;
     }
-
-    public String[] receiveDirFilelist(DataInputStream in) throws IOException {
-        String name = "";
-        String filelist[] = null;
-        // is Dir
-        name = getFilename(in);
-        filelist = getDirfile(in);
-        for (String file : filelist
-                ) {
-            System.out.println(file);
-        }
-        return filelist;
-    }
-
-    String[] getDirfile(DataInputStream in) throws IOException {
-        String filelist[] = null;
-        String str = "";
-        byte[] buffer = new byte[1024];
-        int size = in.readInt();
-        int count = 0, len = 0;
-        while (count < size) {
-            len = in.read(buffer, 0, buffer.length);
-            str += new String(buffer, 0, len);
-            count += len;
-        }
-        filelist = str.split(" ");
-        return filelist;
-    }
-
-    String getFilename(DataInputStream in) throws IOException {
-        String name = "";
-        byte[] buffer = new byte[1024];
-        int size = in.readInt();
-        int count = 0, len = 0;
-        while (count < size) {
-            len = in.read(buffer, 0, buffer.length);
-            name += new String(buffer, 0, len);
-            count += len;
-        }
-        return name;
-    }
-
-//    void receiveFile(String filename, DataInputStream in) throws IOException {
-//        boolean checkfile = in.readBoolean();
-//        boolean isFile = in.readBoolean();
-//        byte[] buffer = new byte[1024];
-//        File file;
-//        FileOutputStream fout;
-//        String filePath = "/Users/ShInGSon/test/" + filename;
-//
-//        if (checkfile && isFile) {
-//            long count = 0, size = 0, len = 0;
-//            file = new File(filePath);
-//            fout = new FileOutputStream(file);
-//            System.out.println("filePath: " + filePath);
-//            size = in.readLong();
-//            System.out.println("size: " + size);
-//            while (count < size) {
-//                len = in.read(buffer, 0, (int) Math.min(buffer.length, size - count));
-//                count += len;
-//                fout.write(buffer, 0, (int) len);
-//            }
-//            System.out.println(filePath + " is downloaded.");
-//            fout.close();
-//        } else if (checkfile && !isFile) {
-//            int fileNum = in.readInt();
-//            System.out.println("File Num: " + fileNum);
-//            file = new File(filePath);
-//            file.mkdirs();
-//            System.out.println(file.getName() + " is made.");
-//            while (fileNum != 0) {
-//                String str = "";
-//                int size = in.readInt();
-//                int count = 0, len = 0;
-//                while (count < size) {
-//                    len = in.read(buffer, 0, buffer.length);
-//                    str += new String(buffer, 0, len);
-//                    count += len;
-//                }
-//                System.out.println("Inside file: " + str);
-//                int count2 = 0, len2 = 0;
-//                long size2 = 0;
-//                File file2 = new File(str);
-//                FileOutputStream fout2 = new FileOutputStream(file2);
-//                System.out.println("filePath: " + filePath + "/" + str);
-//                size2 = in.readLong();
-//                System.out.println("size: " + size2);
-//                while (count < size) {
-//                    len2 = in.read(buffer, 0, (int) Math.min(buffer.length, size2 - count2));
-//                    count2 += len2;
-//                    fout2.write(buffer, 0, len2);
-//                }
-//                System.out.println(str + " is downloaded.");
-//                fout2.close();
-//                fileNum--;
-//            }
-//        } else if (!checkfile) {
-//            String str = "";
-//            int size = in.readInt();
-//            int count = 0, len = 0;
-//            while (count < size) {
-//                len = in.read(buffer, 0, buffer.length);
-//                str += new String(buffer, 0, len);
-//                count += len;
-//            }
-//            System.out.println(str);
-//        }
-//    }
 
     private void receiveFile(DataInputStream in) throws IOException {
         String filename = receiveMsg(in);
@@ -317,16 +223,16 @@ public class FTPClient {
     private void multiThreadReceive(int fileNum) throws IOException {
         int mPort = 9002;
         for (int i = 0; i < fileNum; i++) {
-            int optionID = i+1;
+            int optionID = i + 1;
             new Thread(() -> {
                 try {
                     Socket cSocket = new Socket(ip, mPort);
                     DataInputStream in = new DataInputStream(cSocket.getInputStream());
-                    boolean checkOption=in.readBoolean();
-                    if(checkOption){
-                    receiveFile(in);
-                    }else{
-                        System.out.println(optionID+" option is wrong.\n");
+                    boolean checkOption = in.readBoolean();
+                    if (checkOption) {
+                        receiveFile(in);
+                    } else {
+                        System.out.println(optionID + " option is wrong.\n");
                     }
                 } catch (UnknownHostException e) {
                 } catch (IOException e) {
