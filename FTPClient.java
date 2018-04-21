@@ -23,7 +23,6 @@ public class FTPClient {
         }
     }
 
-
     public void serve(DataInputStream in, DataOutputStream out) throws IOException {
         sendName(out);
         sendPassword(in, out);
@@ -108,7 +107,12 @@ public class FTPClient {
                     mulitThreadReceive(fileNum);
                     continue;
                 }
-            } else if (internal == 006) {
+            }
+            else if(internal==005){
+                int fileNum = in.readInt();
+                mulitThreadReceive(fileNum);
+            }
+            else if (internal == 006) {
                 break;
             } else if (internal == -1) {
                 System.out.println("You type the wrong command! Please type it again!");

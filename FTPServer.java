@@ -56,7 +56,6 @@ public class FTPServer {
             if (internal == 006) break;
             handleCommand(in, out);
         }
-
     }
 
     private String receiveName(Socket socket) throws IOException {
@@ -149,6 +148,17 @@ public class FTPServer {
                 }
                 break;
             case 005:
+                int dirFileNum=sendAll(out,clientPath);
+                out.writeInt(dirFileNum);
+                String dirFile="";
+                File curDir = new File(clientPath);
+                File [] curDirFile = curDir.listFiles();
+                for (File f:curDirFile
+                     ) {
+                    dirFile+=f.getName()+" ";
+                }
+                String [] dirFilelist=dirFile.split(" ");
+                multiThreadSend(dirFilelist,clientPath);
                 break;
             case 006:
                 break;
@@ -179,8 +189,7 @@ public class FTPServer {
 
     private void listFiles(DataOutputStream out, String clientPath) throws IOException {
         String info = "";
-        String clientCurrentDir = clientPath + "/";
-        File dir = new File(clientCurrentDir);
+        File dir = new File(clientPath);
         File[] fileList = dir.listFiles();
 
         for (File file : fileList
@@ -394,6 +403,19 @@ public class FTPServer {
             }).start();
         }
         multiServerSocket.close();
+    }
+
+    private int sendAll(DataOutputStream out, String clientPath) throws IOException {
+        File curDir = new File(clientPath);
+        File[] filelist = curDir.listFiles();
+        int fileNum = filelist.length;
+//        for (File file : filelist
+//                ) {
+//            if (file.isFile()) {
+//                sendFile(file.getName(), out, clientPath);
+//            }
+//        }
+        return fileNum;
     }
 
     public static void main(String[] args) throws IOException {
