@@ -4,6 +4,7 @@ import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Scanner;
+import java.util.zip.ZipInputStream;
 
 public class FTPServer {
     public static int connectCount = 0;
@@ -30,7 +31,7 @@ public class FTPServer {
         while (true) {
             Socket cSocket = sSocket.accept();
             connectCount++;
-            System.out.println("Connected client：" + connectCount);
+            System.out.println("Connected client:" + connectCount);
             clientInfo = "connected from " + receiveName(cSocket) + ": " +
                     cSocket.getInetAddress().getHostAddress() + "\n";
             clientList += clientInfo;
@@ -142,23 +143,32 @@ public class FTPServer {
                 System.out.println("fileNum: " + fileNum);
                 out.writeInt(fileNum);
                 if (fileNum == 1) {
-                    sendFile(optionList[0], out, clientPath);
+                    File f = new File(optionList[0]);
+                    if (checkOption(f.getName(),out,clientPath)) {
+                        if (f.isFile()) {
+                            sendFile(optionList[0], out, clientPath);
+                        } else {
+//                        String srcDir = clientPath+"/"+optionList[0];
+                            String zip = zipFolder(clientPath, optionList[0]);
+                            sendFile(zip, out, clientPath);
+                        }
+                    }
                 } else {
                     multiThreadSend(optionList, clientPath);
                 }
                 break;
             case 005:
-                int dirFileNum=sendAll(out,clientPath);
+                int dirFileNum = sendAll(out, clientPath);
                 out.writeInt(dirFileNum);
-                String dirFile="";
+                String dirFile = "";
                 File curDir = new File(clientPath);
-                File [] curDirFile = curDir.listFiles();
-                for (File f:curDirFile
-                     ) {
-                    dirFile+=f.getName()+" ";
+                File[] curDirFile = curDir.listFiles();
+                for (File f : curDirFile
+                        ) {
+                    dirFile += f.getName() + " ";
                 }
-                String [] dirFilelist=dirFile.split(" ");
-                multiThreadSend(dirFilelist,clientPath);
+                String[] dirFilelist = dirFile.split(" ");
+                multiThreadSend(dirFilelist, clientPath);
                 break;
             case 006:
                 break;
@@ -196,28 +206,27 @@ public class FTPServer {
                 ) {
             info += getInfo(file) + "\n";
         }
-        System.out.println(info + "info length: " + info.length());
-
         out.writeInt(info.length());
         out.write(info.getBytes());
+        System.out.println(info + "info length: " + info.length());
     }
 
     private String getInfo(File f) {
         Date date = new Date(f.lastModified());
-        String ld = new SimpleDateFormat("MMM dd, yyyy").format(date);
+//        String ld = new SimpleDateFormat("MMM dd, yyyy").format(date);
         if (f.isFile()) {
-            return String.format("%dKB\t%s\t%s",
+            return String.format("%dKB\t%s",
                     (int) Math.ceil((float) f.length() / 1024),
-                    ld, f.getName());
+                    f.getName());
         } else
-            return String.format("<DIR>\t%s\t%s", ld, f.getName());
+            return String.format("<DIR>\t%s", f.getName());
     }
 
     private void changeDir(String path, DataOutputStream out, String clientPath) throws IOException {
         boolean checkPath = false;
         String msg = "";
-        String currentP = clientPath + "/";
-        String newP = clientPath + "/" + path;
+        String currentP = clientPath + "\\";
+        String newP = clientPath + "\\" + path;
         File dir = new File(currentP);
         File newDir = new File(newP);
         if (newDir.isDirectory() && !path.equals("..")) { // correct next path
@@ -265,6 +274,19 @@ public class FTPServer {
 
         }
 
+    }
+
+    private boolean checkOption(String option, DataOutputStream out,String clientPath) throws IOException {
+        boolean checkOption = false;
+        String filePath = clientPath + "/" + option;
+        File file = new File(filePath);
+        if (file.exists()) {
+            checkOption = true;
+        } else {
+            checkOption = false;
+        }
+        out.writeBoolean(checkOption);
+        return checkOption;
     }
 
     private void checkFileAndDir(String filename, DataOutputStream out, String clientPath) throws IOException {
@@ -386,6 +408,13 @@ public class FTPServer {
         msg = "Finish download: " + filename;
         out.writeInt(msg.length());
         out.write(msg.getBytes());
+        fin.close();
+        if (file.getName().contains(".zip")) {
+//            System.out.println(file.getName());
+            if (file.delete()) {
+                System.out.println(file.getName() + " is deleted");
+            }
+        }
     }
 
     private void multiThreadSend(String[] filename, String clientPath) throws IOException {
@@ -397,7 +426,20 @@ public class FTPServer {
             DataOutputStream out = new DataOutputStream(cSocket.getOutputStream());
             new Thread(() -> {
                 try {
-                    sendFile(filename[fileID], out, clientPath);
+                    if(checkOption(filename[fileID],out,clientPath)){
+                        String filepath = clientPath+"/"+filename[fileID];
+                        File f = new File(filepath);
+                        if(f.isFile()){
+                        sendFile(filename[fileID], out, clientPath);
+                        }else{
+                            String zip = zipFolder(clientPath, filename[fileID]);
+                            sendFile(zip, out, clientPath);
+                        }
+                    }
+                    else{
+                        System.out.println((fileID+1)+" option is wrong");
+                    }
+//                    String zip = zipFolder(clientPath, optionList[0]);
                 } catch (IOException e) {
                 }
             }).start();
@@ -416,6 +458,12 @@ public class FTPServer {
 //            }
 //        }
         return fileNum;
+    }
+
+    private String zipFolder(String srcDir, String folder) throws IOException {
+        String zipFile = srcDir + "/" + folder + ".zip";
+        new CreateZipFile(srcDir+"/"+folder, zipFile);
+        return folder + ".zip";
     }
 
     public static void main(String[] args) throws IOException {

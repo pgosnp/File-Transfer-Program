@@ -8,6 +8,7 @@ public class FTPClient {
     String rootDir;
     String currentDir;
     String ip;
+    String downloadPath = "D:\\test download\\";
     int port;
 
     public FTPClient(String ip, int port) throws IOException {
@@ -35,12 +36,12 @@ public class FTPClient {
         Scanner scanner = new Scanner(System.in);
         System.out.println("You can use the following command:\n" +
                 "(1) ls: This command allows the users to browse the shared files with the corresponding file name and file size.\n" +
-                "(2) cd ‘directory’: This command allows the users to change to current directory to the ‘directory’. For example, cd folder1\n" +
+                "(2) cd ．directory・: This command allows the users to change to current directory to the ．directory・. For example, cd folder1\n" +
                 "(3) pwd: This command prints working directory to the users.\n" +
-                "(4) dl ‘filename(s)’: This command allows the users to download or multithread download the selected" +
-                "files by input “dl ‘filename(s)’” such as:\n" +
-                "Example 1: “dl 1.txt”. The example only download 1.txt.\n" +
-                "Example 2:“dl 1.txt 2.txt 3.txt”. The example will download 1.txt,2.txt and 3.txt.\n" +
+                "(4) dl ．filename(s)・: This command allows the users to download or multithread download the selected" +
+                "files by input ：dl ．filename(s)・； such as:\n" +
+                "Example 1: ：dl 1.txt；. The example only download 1.txt.\n" +
+                "Example 2:：dl 1.txt 2.txt 3.txt；. The example will download 1.txt,2.txt and 3.txt.\n" +
                 "(5) dlall: This command allows the users to download the whole directory by multithread" +
                 "downloading.\n" +
                 "(6) exit: This command allows the users to quit the program and then close or disconnect the" +
@@ -101,18 +102,21 @@ public class FTPClient {
                 System.out.println();
             } else if (internal == 004) {
                 int fileNum = in.readInt();
-                if (fileNum <= 1) {
-                    receiveFile(in);
+                if (fileNum == 1) {
+                    boolean checkOption = in.readBoolean();
+                    if (checkOption) {
+                        receiveFile(in);
+                    }
+                    else {
+                        System.out.println("Option is wrong. Please input ootion again.\n");
+                    }
                 } else {
-                    mulitThreadReceive(fileNum);
-                    continue;
+                    multiThreadReceive(fileNum);
                 }
-            }
-            else if(internal==005){
+            } else if (internal == 005) {
                 int fileNum = in.readInt();
-                mulitThreadReceive(fileNum);
-            }
-            else if (internal == 006) {
+                multiThreadReceive(fileNum);
+            } else if (internal == 006) {
                 break;
             } else if (internal == -1) {
                 System.out.println("You type the wrong command! Please type it again!");
@@ -294,7 +298,7 @@ public class FTPClient {
         byte[] buffer = new byte[1024];
         File file;
         FileOutputStream fout;
-        String filePath = "/Users/ShInGSon/test/" + filename;
+        String filePath = downloadPath + filename;
         long count = 0, size = 0, len = 0;
         file = new File(filePath);
         fout = new FileOutputStream(file);
@@ -310,14 +314,20 @@ public class FTPClient {
         fout.close();
     }
 
-    private void mulitThreadReceive(int fileNum) throws IOException {
+    private void multiThreadReceive(int fileNum) throws IOException {
         int mPort = 9002;
         for (int i = 0; i < fileNum; i++) {
+            int optionID = i+1;
             new Thread(() -> {
                 try {
                     Socket cSocket = new Socket(ip, mPort);
                     DataInputStream in = new DataInputStream(cSocket.getInputStream());
+                    boolean checkOption=in.readBoolean();
+                    if(checkOption){
                     receiveFile(in);
+                    }else{
+                        System.out.println(optionID+" option is wrong.\n");
+                    }
                 } catch (UnknownHostException e) {
                 } catch (IOException e) {
                 }
