@@ -321,6 +321,9 @@ public class FTPServer {
         out.writeInt(msg.length());
         out.write(msg.getBytes());
         fin.close();
+        
+        // Since if option is folder, it will first create zip file and then send it to the client
+        // Zip file is redundant in shared folder. Thus, it needs to be deleted after it finish sending to client
         if (file.getName().contains(".zip")) {
             if (file.delete()) {
                 System.out.println(file.getName() + " is deleted");
@@ -337,18 +340,29 @@ public class FTPServer {
             DataOutputStream out = new DataOutputStream(cSocket.getOutputStream());
             new Thread(() -> {
                 try {
+
+                    // option is correct
                     if (checkOption(filename[fileID], out, clientPath)) {
                         String filepath = clientPath + "/" + filename[fileID];
                         File f = new File(filepath);
+
+                        // Only send file if option is file
                         if (f.isFile()) {
                             sendFile(filename[fileID], out, clientPath);
-                        } else {
+                        }
+
+                        // Zip file will be sent if option is folder
+                        else {
                             String zip = zipFolder(clientPath, filename[fileID]);
                             sendFile(zip, out, clientPath);
                         }
-                    } else {
+                    }
+
+                    // option is wrong
+                    else {
                         System.out.println((fileID + 1) + " option is wrong");
                     }
+
                 } catch (IOException e) {
                 }
             }).start();

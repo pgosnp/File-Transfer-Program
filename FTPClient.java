@@ -106,17 +106,27 @@ public class FTPClient {
                 System.out.println();
             }
 
-            // 004: dl
+            // 004: dl. If option is folder, it will receive zip file for client
             else if (internal == 004) {
                 int fileNum = in.readInt();
+
+                // download single file/folder
                 if (fileNum == 1) {
                     boolean checkOption = in.readBoolean();
+
+                    // filename/folder name is correct
                     if (checkOption) {
                         receiveFile(in);
-                    } else {
+                    }
+
+                    // filename/folder name is wrong
+                    else {
                         System.out.println("Option is wrong. Please input option again.\n");
                     }
-                } else {
+                }
+
+                // download multi-files/folder
+                else {
                     multiThreadReceive(fileNum);
                 }
             }
