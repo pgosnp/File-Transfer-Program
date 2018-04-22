@@ -234,7 +234,9 @@ public class FTPServer {
         String newP = clientPath + "\\" + path;
         File dir = new File(currentP);
         File newDir = new File(newP);
-        if (newDir.isDirectory() && !path.equals("..")) { // correct next path
+
+        // Correct next path
+        if (newDir.isDirectory() && !path.startsWith(".")) {
             checkPath = true;
             out.writeBoolean(checkPath);
             System.out.println(newDir.getName() + " is a folder.");
@@ -242,7 +244,7 @@ public class FTPServer {
             out.writeInt(clientPath.length());
             out.write(clientPath.getBytes());
 
-        } else if (path.equals("..")) {
+        } else if (path.startsWith("..")) {
 
             // At root dir and cd ..
             if (dir.getCanonicalPath().equals(rootDir.getCanonicalPath())) {
@@ -268,6 +270,14 @@ public class FTPServer {
             checkPath = true;
             out.writeBoolean(checkPath);
             clientPath = rootDir.getCanonicalPath();
+            out.writeInt(clientPath.length());
+            out.write(clientPath.getBytes());
+        }
+
+            // Stay in same Dir
+        else if (path.equals(".")) {
+            checkPath = true;
+            out.writeBoolean(checkPath);
             out.writeInt(clientPath.length());
             out.write(clientPath.getBytes());
         }
@@ -321,7 +331,7 @@ public class FTPServer {
         out.writeInt(msg.length());
         out.write(msg.getBytes());
         fin.close();
-        
+
         // Since if option is folder, it will first create zip file and then send it to the client
         // Zip file is redundant in shared folder. Thus, it needs to be deleted after it finish sending to client
         if (file.getName().contains(".zip")) {
